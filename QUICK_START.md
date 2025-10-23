@@ -1,6 +1,6 @@
 # Quick Start Guide
 
-## ✅ All Fixed - Ready to Use!
+## ✅ All Fixed - Ready to Use
 
 Your property research and dealer calling application now uses **real internet search** instead of mock data.
 
@@ -19,11 +19,12 @@ Your property research and dealer calling application now uses **real internet s
 npm run dev
 ```
 
-The app will start at: http://localhost:9002
+The app will start at: <http://localhost:9002>
 
 ### 2. Search for Properties
 
 Enter a query like:
+
 ```
 2 BHK Baner under 80 lakhs contact dealer
 ```
@@ -33,12 +34,14 @@ Click **Search**
 ### 3. Watch the Logs
 
 **Verbose Log Panel** (right side) shows:
+
 - Subqueries being generated
 - Internet search progress
 - Results summary
 - Phone numbers found
 
 **Server Console** (terminal) shows:
+
 - Detailed Tavily API calls
 - Phone number extraction
 - Warnings for missing data
@@ -47,6 +50,7 @@ Click **Search**
 ### 4. View Results
 
 Results table shows:
+
 - Property listings from real websites
 - Dealer names and phone numbers
 - Confidence scores
@@ -55,6 +59,7 @@ Results table shows:
 ### 5. Call a Dealer
 
 Click **Call** button on any result with phone numbers:
+
 - Twilio initiates the call
 - AI bot has conversation
 - Transcript appears in real-time
@@ -74,13 +79,15 @@ Property Pimple Saudagar agent contact
 
 ## What You'll See
 
-### In the UI:
+### In the UI
+
 - 5-20 property listings per search
 - Real dealer phone numbers
 - Confidence scores (0-1)
 - Detailed search logs
 
-### In the Console:
+### In the Console
+
 ```
 [Flow] Using REAL web search via Tavily API
 [Tavily] Searching for: "2 BHK Baner dealer contact phone number"
@@ -92,14 +99,15 @@ Property Pimple Saudagar agent contact
 
 ## Configuration
 
-Your `.env` is already configured:
+Your `.env` should be configured (see `.env.example`):
+
 ```
-TAVILY_API_KEY=your_tavily_api_key_here ✅
-TWILIO_ACCOUNT_SID=your_twilio_account_sid_here ✅
-TWILIO_AUTH_TOKEN=your_twilio_auth_token_here ✅
-TWILIO_PHONE_NUMBER=+1234567890 ✅
-TWILIO_TO_NUMBER=+1234567890 ✅
-APP_BASE_URL=https://your-domain.com ✅
+TAVILY_API_KEY=your_tavily_api_key_here
+TWILIO_ACCOUNT_SID=your_twilio_account_sid_here
+TWILIO_AUTH_TOKEN=your_twilio_auth_token_here
+TWILIO_PHONE_NUMBER=+1234567890
+TWILIO_TO_NUMBER=+1234567890
+APP_BASE_URL=https://your-domain.com
 ```
 
 ## Files Changed
@@ -120,6 +128,7 @@ APP_BASE_URL=https://your-domain.com ✅
 ## Testing
 
 Run the test script to verify search:
+
 ```bash
 npx tsx test-search.ts
 ```
@@ -127,16 +136,19 @@ npx tsx test-search.ts
 ## Troubleshooting
 
 ### No results found?
+
 - Check your internet connection
 - Verify TAVILY_API_KEY in .env
 - Try a more specific query
 
 ### No phone numbers?
+
 - Some listings don't include phone numbers
 - Try different search terms
 - Results without phones have lower confidence
 
 ### Call not working?
+
 - Verify Twilio credentials in .env
 - Check TWILIO_TO_NUMBER is set
 - Ensure APP_BASE_URL is accessible
@@ -151,6 +163,7 @@ npx tsx test-search.ts
 ## Support
 
 Check the documentation files for more details:
+
 - Technical implementation: `SEARCH_IMPLEMENTATION.md`
 - Log explanations: `VERBOSE_LOGS_GUIDE.md`
 - User experience: `WHAT_YOU_WILL_SEE.md`

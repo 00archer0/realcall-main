@@ -196,15 +196,15 @@ NEXT STEPS:
 
 ## Configuration
 
-Your `.env` file is ready:
+Your `.env` file should be configured (see `.env.example`):
 ```
-GEMINI_API_KEY=your_gemini_api_key_here ✅
-TAVILY_API_KEY=your_tavily_api_key_here ✅
-TWILIO_ACCOUNT_SID=your_twilio_account_sid_here ✅
-TWILIO_AUTH_TOKEN=your_twilio_auth_token_here ✅
-TWILIO_PHONE_NUMBER=+1234567890 ✅
-TWILIO_TO_NUMBER=+1234567890 ✅
-APP_BASE_URL=https://your-domain.com ✅
+GEMINI_API_KEY=your_gemini_api_key_here
+TAVILY_API_KEY=your_tavily_api_key_here
+TWILIO_ACCOUNT_SID=your_twilio_account_sid_here
+TWILIO_AUTH_TOKEN=your_twilio_auth_token_here
+TWILIO_PHONE_NUMBER=+1234567890
+TWILIO_TO_NUMBER=+1234567890
+APP_BASE_URL=https://your-domain.com
 ```
 
 ---
