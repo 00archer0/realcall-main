@@ -1,16 +1,10 @@
-
 'use server';
 /**
- * @fileOverview Defines a Genkit flow for generating user responses in a real-time chatbot conversation.
- *
- * - userChat - A function that handles the user's side of the conversation.
- * - UserChatInput - The input type for the userChat function.
- * - UserChatOutput - The return type for the userChat function (the user's text response).
+ * @fileOverview Defines a flow for generating user responses in a real-time chatbot conversation.
  */
 
-import { ai } from '@/ai/genkit';
-import { z } from 'genkit';
-import type { ChatMessage } from '@/lib/types';
+import { chatCompletion } from '@/ai/groq';
+import { z } from 'zod';
 
 const UserChatInputSchema = z.object({
   propertyTitle: z.string().describe('The title of the property listing.'),
@@ -22,16 +16,13 @@ const UserChatInputSchema = z.object({
 });
 export type UserChatInput = z.infer<typeof UserChatInputSchema>;
 
-// The output is just the user's next message.
 export type UserChatOutput = string;
 
 export async function userChat(input: UserChatInput): Promise<UserChatOutput> {
-  return userChatFlow(input);
-}
-
-const systemPrompt = `You are role-playing as a potential property buyer.
-The agent you are talking to is named "{{dealerName}}".
-You are inquiring about a property named "{{propertyTitle}}".
+  try {
+    const systemPrompt = `You are role-playing as a potential property buyer.
+The agent you are talking to is named "${input.dealerName}".
+You are inquiring about a property named "${input.propertyTitle}".
 
 Your goal is to be a typical, slightly impatient but polite, prospective buyer.
 Keep your responses very short and to the point, like a real phone call.
@@ -42,37 +33,24 @@ Keep your responses very short and to the point, like a real phone call.
 - If the agent asks for your details, you can politely deflect or end the call.
 
 Based on the history, provide the next natural response for the 'user'.
-Do NOT repeat the agent's message. Only provide your response as the user.
-`;
+Do NOT repeat the agent's message. Only provide your response as the user.`;
 
-const userChatPrompt = ai.definePrompt(
-  {
-    name: 'userChatPrompt',
-    input: { schema: UserChatInputSchema },
-    // We expect a simple string response for the user's message
-    output: { format: 'text' },
-    prompt: systemPrompt + '\n\nConversation History:\n{{#each history}}{{role}}: {{content}}\n{{/each}}\nUser:',
+    // Convert history to messages format
+    const historyMessages = input.history.map(msg => ({
+      role: msg.role === 'user' ? 'assistant' as const : 'user' as const,
+      content: msg.content,
+    }));
+
+    const response = await chatCompletion(
+      [
+        { role: 'system', content: systemPrompt },
+        ...historyMessages,
+      ]
+    );
+
+    return response;
+  } catch (e) {
+    console.error('Error in userChat:', e);
+    throw e;
   }
-);
-
-
-const userChatFlow = ai.defineFlow(
-  {
-    name: 'userChatFlow',
-    inputSchema: UserChatInputSchema,
-    outputSchema: z.string(),
-  },
-  async (input) => {
-    try {
-      const response = await userChatPrompt(input);
-      const output = response.output;
-      if (!output) {
-        throw new Error('Received no text output from model for user chat.');
-      }
-      return output;
-    } catch (e) {
-      console.error("Error in userChatFlow:", e);
-      throw e;
-    }
-  }
-);
+}

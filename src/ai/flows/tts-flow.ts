@@ -1,88 +1,62 @@
-
 'use server';
 /**
- * @fileOverview Converts text to speech using a GenAI model.
- *
- * - textToSpeech - A function that converts text into a WAV audio data URI.
+ * @fileOverview Converts text to speech using Groq's TTS API.
  */
 
-import { ai } from '@/ai/genkit';
-import { googleAI } from '@genkit-ai/google-genai';
-import { z } from 'genkit';
-import wav from 'wav';
+import { groq } from '@/ai/groq';
+import { z } from 'zod';
 
 const TextToSpeechSchema = z.object({
   text: z.string().describe('The text to convert to speech.'),
 });
 
 const TextToSpeechOutputSchema = z.object({
-  audio: z.string().describe('The base64 encoded WAV audio data URI.'),
+  audio: z.string().describe('The base64 encoded audio data URI.'),
 });
 
-export async function textToSpeech(input: z.infer<typeof TextToSpeechSchema>): Promise<z.infer<typeof TextToSpeechOutputSchema>> {
-  return ttsFlow(input);
-}
-
-const ttsFlow = ai.defineFlow(
-  {
-    name: 'ttsFlow',
-    inputSchema: TextToSpeechSchema,
-    outputSchema: TextToSpeechOutputSchema,
-  },
-  async ({ text }) => {
-    const { media } = await ai.generate({
-      model: googleAI.model('gemini-2.5-flash-preview-tts'),
-      config: {
-        responseModalities: ['AUDIO'],
-        speechConfig: {
-          voiceConfig: {
-            prebuiltVoiceConfig: { voiceName: 'Algenib' },
-          },
-        },
-      },
-      prompt: text,
-    });
-
-    if (!media) {
-      throw new Error('No media returned from TTS model.');
+export async function textToSpeech(
+  input: z.infer<typeof TextToSpeechSchema>
+): Promise<z.infer<typeof TextToSpeechOutputSchema>> {
+  try {
+    if (!process.env.GROQ_API_KEY) {
+      throw new Error('GROQ_API_KEY is not set in environment variables');
     }
 
-    const pcmData = Buffer.from(
-      media.url.substring(media.url.indexOf(',') + 1),
-      'base64'
-    );
+    console.log('[TTS] Generating speech for text:', input.text.substring(0, 100) + '...');
 
-    const wavData = await toWav(pcmData);
+    // Use Groq's TTS API directly via fetch
+    const response = await fetch('https://api.groq.com/openai/v1/audio/speech', {
+      method: 'POST',
+      headers: {
+        'Authorization': `Bearer ${process.env.GROQ_API_KEY}`,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        model: 'playai-tts',
+        voice: 'Celeste-PlayAI', // Professional male voice
+        input: input.text,
+        response_format: 'wav',
+      }),
+    });
 
+    if (!response.ok) {
+      const errorText = await response.text();
+      console.error('[TTS] Groq API error response:', errorText);
+      throw new Error(`Groq TTS API error (${response.status}): ${response.statusText} - ${errorText}`);
+    }
+
+    // Convert the response to a buffer
+    const audioBuffer = await response.arrayBuffer();
+    const base64Audio = Buffer.from(audioBuffer).toString('base64');
+    
+    console.log('[TTS] Successfully generated audio, size:', audioBuffer.byteLength, 'bytes');
+    
     return {
-      audio: 'data:audio/wav;base64,' + wavData,
+      audio: `data:audio/wav;base64,${base64Audio}`,
     };
+  } catch (error) {
+    console.error('[TTS] Error generating speech with Groq:', error);
+    console.error('[TTS] Error details:', error instanceof Error ? error.message : String(error));
+    throw error;
   }
-);
-
-async function toWav(
-  pcmData: Buffer,
-  channels = 1,
-  rate = 24000,
-  sampleWidth = 2
-): Promise<string> {
-  return new Promise((resolve, reject) => {
-    const writer = new wav.Writer({
-      channels,
-      sampleRate: rate,
-      bitDepth: sampleWidth * 8,
-    });
-
-    const bufs: any[] = [];
-    writer.on('error', reject);
-    writer.on('data', function (d) {
-      bufs.push(d);
-    });
-    writer.on('end', function () {
-      resolve(Buffer.concat(bufs).toString('base64'));
-    });
-
-    writer.write(pcmData);
-    writer.end();
-  });
 }

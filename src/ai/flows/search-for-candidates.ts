@@ -1,14 +1,8 @@
-
 'use server';
 /**
- * @fileOverview This file defines a Genkit flow for searching for real estate candidates online.
- *
- * - searchForCandidates - A function that takes subqueries and returns a list of candidate objects.
- * - SearchForCandidatesInput - The input type for the searchForCandidates function.
- * - SearchForCandidatesOutput - The output type for the searchForCandidates function.
+ * @fileOverview Defines a flow for searching for real estate candidates online.
  */
-import { ai } from '@/ai/genkit';
-import { z } from 'genkit';
+import { z } from 'zod';
 import { searchWeb, extractPhoneNumbers, extractDealerName, extractAddress } from '@/ai/tools/tavily-search';
 
 const CandidateSchema = z.object({
@@ -50,88 +44,76 @@ export type SearchForCandidatesOutput = z.infer<typeof SearchForCandidatesOutput
 export async function searchForCandidates(
   input: SearchForCandidatesInput
 ): Promise<SearchForCandidatesOutput> {
-  return searchForCandidatesFlow(input);
-}
-
-
-const searchForCandidatesFlow = ai.defineFlow(
-  {
-    name: 'searchForCandidatesFlow',
-    inputSchema: SearchForCandidatesInputSchema,
-    outputSchema: SearchForCandidatesOutputSchema,
-  },
-  async (input) => {
-    const startTime = Date.now();
-    console.log('[Flow] Using REAL web search via Tavily API. Searching for property listings...');
-    
-    const allCandidates: SearchForCandidatesOutput = [];
-    const seenUrls = new Set<string>();
-    
-    // Search for each subquery
-    for (const subquery of input.subqueries) {
-      try {
-        console.log(`[Flow] Searching subquery #${subquery.id}: "${subquery.query_text}"`);
+  const startTime = Date.now();
+  console.log('[Flow] Using REAL web search via Tavily API. Searching for property listings...');
+  
+  const allCandidates: SearchForCandidatesOutput = [];
+  const seenUrls = new Set<string>();
+  
+  // Search for each subquery
+  for (const subquery of input.subqueries) {
+    try {
+      console.log(`[Flow] Searching subquery #${subquery.id}: "${subquery.query_text}"`);
+      
+      // Perform web search using Tavily
+      const searchResults = await searchWeb(subquery.query_text, 5);
+      
+      // Process each search result
+      for (const result of searchResults) {
+        // Skip duplicates
+        if (seenUrls.has(result.url)) {
+          console.log(`[Flow] Skipping duplicate URL: ${result.url}`);
+          continue;
+        }
+        seenUrls.add(result.url);
         
-        // Perform web search using Tavily
-        const searchResults = await searchWeb(subquery.query_text, 5);
+        // Extract information from the search result
+        const fullText = `${result.title} ${result.content}`;
+        const phoneNumbers = extractPhoneNumbers(fullText);
         
-        // Process each search result
-        for (const result of searchResults) {
-          // Skip duplicates
-          if (seenUrls.has(result.url)) {
-            console.log(`[Flow] Skipping duplicate URL: ${result.url}`);
-            continue;
-          }
-          seenUrls.add(result.url);
-          
-          // Extract information from the search result
-          const fullText = `${result.title} ${result.content}`;
-          const phoneNumbers = extractPhoneNumbers(fullText);
-          
-          const dealerName = extractDealerName(fullText, result.title);
-          const address = extractAddress(fullText, subquery.query_text) || subquery.location;
-          
-          // Calculate confidence based on relevance score and phone number presence
-          let confidence = result.score;
-          if (phoneNumbers.length > 0) {
-            confidence = Math.min(result.score * 0.7 + 0.3, 1); // Boost confidence if phone found
-          } else {
-            confidence = Math.min(result.score * 0.5, 0.6); // Lower confidence if no phone
-            console.log(`[Flow] Warning: No phone numbers found for: ${result.title}`);
-          }
-          
-          const candidate = {
-            subquery_id: subquery.id,
-            property_title: result.title,
-            address: address,
-            dealer_name: dealerName,
-            phone_numbers: phoneNumbers.length > 0 ? phoneNumbers : ['No phone number found'],
-            source_url: result.url,
-            last_seen: new Date().toISOString(),
-            snippet: result.content.substring(0, 200) + '...',
-            confidence: confidence,
-            status: 'New' as const,
-            last_call_summary: null,
-            call_transcript: null,
-            recording_url: null,
-          };
-          
-          allCandidates.push(candidate);
-          console.log(`[Flow] Added candidate: ${candidate.property_title} (${phoneNumbers.length} phone numbers found)`);
+        const dealerName = extractDealerName(fullText, result.title);
+        const address = extractAddress(fullText, subquery.query_text) || subquery.location;
+        
+        // Calculate confidence based on relevance score and phone number presence
+        let confidence = result.score;
+        if (phoneNumbers.length > 0) {
+          confidence = Math.min(result.score * 0.7 + 0.3, 1); // Boost confidence if phone found
+        } else {
+          confidence = Math.min(result.score * 0.5, 0.6); // Lower confidence if no phone
+          console.log(`[Flow] Warning: No phone numbers found for: ${result.title}`);
         }
         
-      } catch (error) {
-        console.error(`[Flow] Error searching subquery #${subquery.id}:`, error);
-        // Continue with other subqueries even if one fails
+        const candidate = {
+          subquery_id: subquery.id,
+          property_title: result.title,
+          address: address,
+          dealer_name: dealerName,
+          phone_numbers: phoneNumbers.length > 0 ? phoneNumbers : ['No phone number found'],
+          source_url: result.url,
+          last_seen: new Date().toISOString(),
+          snippet: result.content.substring(0, 200) + '...',
+          confidence: confidence,
+          status: 'New' as const,
+          last_call_summary: null,
+          call_transcript: null,
+          recording_url: null,
+        };
+        
+        allCandidates.push(candidate);
+        console.log(`[Flow] Added candidate: ${candidate.property_title} (${phoneNumbers.length} phone numbers found)`);
       }
+      
+    } catch (error) {
+      console.error(`[Flow] Error searching subquery #${subquery.id}:`, error);
+      // Continue with other subqueries even if one fails
     }
-    
-    const duration = ((Date.now() - startTime) / 1000).toFixed(2);
-    console.log(`[Flow] Search complete. Found ${allCandidates.length} total candidates in ${duration}s.`);
-    
-    // Sort by confidence score (highest first)
-    allCandidates.sort((a, b) => b.confidence - a.confidence);
-    
-    return allCandidates;
   }
-);
+  
+  const duration = ((Date.now() - startTime) / 1000).toFixed(2);
+  console.log(`[Flow] Search complete. Found ${allCandidates.length} total candidates in ${duration}s.`);
+  
+  // Sort by confidence score (highest first)
+  allCandidates.sort((a, b) => b.confidence - a.confidence);
+  
+  return allCandidates;
+}

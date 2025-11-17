@@ -1,15 +1,10 @@
-
 'use server';
 /**
- * @fileOverview This file defines a Genkit flow for generating structured real estate subqueries from a free-text query.
- *
- * - generateRealEstateSubqueries - A function that takes a free-text query and returns an array of structured subqueries.
- * - GenerateRealEstateSubqueriesInput - The input type for the generateRealEstateSubqueries function.
- * - GenerateRealEstateSubqueriesOutput - The output type for the generateRealEstateSubqueries function.
+ * @fileOverview Generates structured real estate subqueries from a free-text query using Groq.
  */
 
-import {ai} from '@/ai/genkit';
-import {z} from 'genkit';
+import { chatCompletion } from '@/ai/groq';
+import { z } from 'zod';
 
 const GenerateRealEstateSubqueriesInputSchema = z.object({
   query: z.string().describe('A free-text real estate query.'),
@@ -34,10 +29,8 @@ export type GenerateRealEstateSubqueriesOutput = z.infer<typeof GenerateRealEsta
 export async function generateRealEstateSubqueries(
   input: GenerateRealEstateSubqueriesInput
 ): Promise<GenerateRealEstateSubqueriesOutput> {
-  return generateRealEstateSubqueriesFlow(input);
-}
-
-const systemPrompt = `You are an assistant that converts a single free-text real-estate query into multiple structured web-search subqueries optimized for finding property dealers and their contact information. For each subquery, generate a JSON object with the following fields: id, query_text, location, property_type, price_range, date_range, filters, priority, note. Produce 3-8 focused subqueries covering likely variants.
+  try {
+    const systemPrompt = `You are an assistant that converts a single free-text real-estate query into multiple structured web-search subqueries optimized for finding property dealers and their contact information. For each subquery, generate a JSON object with the following fields: id, query_text, location, property_type, price_range, date_range, filters, priority, note. Produce 3-8 focused subqueries covering likely variants.
 
 IMPORTANT: Each query_text should include keywords like "dealer", "agent", "contact", "phone", "broker", or "real estate" to maximize finding contact information.
 
@@ -59,66 +52,42 @@ Your response:
   "filters": null,
   "priority": 1,
   "note": "Exact match with contact info, recent listings"
-},
-{
-  "id": 2,
-  "query_text": "3 BHK apartment real estate agent Pune phone",
-  "location": "Pune",
-  "property_type": "apartment",
-  "price_range": "₹50L-1.5Cr",
-  "date_range": "last 90 days",
-  "filters": null,
-  "priority": 2,
-  "note": "Wider city search with agent contact"
-},
-{
-  "id": 3,
-  "query_text": "Kothrud property dealer 3 BHK contact number",
-  "location": "Kothrud",
-  "property_type": "resale",
-  "price_range": null,
-  "date_range": "last 7 days",
-  "filters": null,
-  "priority": 3,
-  "note": "Recent listings with dealer contact"
-},
-{
-  "id": 4,
-  "query_text": "3 BHK Kothrud broker phone number under 1.5 crore",
-  "location": "Kothrud",
-  "property_type": "apartment",
-  "price_range": "₹1.0Cr-1.5Cr",
-  "date_range": "last 60 days",
-  "filters": null,
-  "priority": 4,
-  "note": "Broker contact with price range"
-}]
-`;
+}]`;
 
-const generateRealEstateSubqueriesPrompt = ai.definePrompt({
-  name: 'generateRealEstateSubqueriesPrompt',
-  input: {schema: GenerateRealEstateSubqueriesInputSchema},
-  output: {schema: GenerateRealEstateSubqueriesOutputSchema},
-  prompt: systemPrompt + '\n\nUser Query: {{{query}}}',
-});
+    const response = await chatCompletion(
+      [
+        { role: 'system', content: systemPrompt },
+        { role: 'user', content: `User Query: ${input.query}` },
+      ],
+      { response_format: { type: 'json_object' } }
+    );
 
-const generateRealEstateSubqueriesFlow = ai.defineFlow(
-  {
-    name: 'generateRealEstateSubqueriesFlow',
-    inputSchema: GenerateRealEstateSubqueriesInputSchema,
-    outputSchema: GenerateRealEstateSubqueriesOutputSchema,
-  },
-  async input => {
+    // Parse the response - it might be wrapped in an object or be an array directly
+    let parsed;
     try {
-      const response = await generateRealEstateSubqueriesPrompt(input);
-      const output = response.output;
-      if (!output) {
-        throw new Error('Received no output from model for subquery generation.');
+      parsed = JSON.parse(response);
+      // If it's wrapped in an object, extract the array
+      if (Array.isArray(parsed)) {
+        // Already an array
+      } else if (parsed.subqueries && Array.isArray(parsed.subqueries)) {
+        parsed = parsed.subqueries;
+      } else if (parsed.queries && Array.isArray(parsed.queries)) {
+        parsed = parsed.queries;
+      } else {
+        // Try to find the first array value
+        const firstArrayValue = Object.values(parsed).find(v => Array.isArray(v));
+        if (firstArrayValue) {
+          parsed = firstArrayValue;
+        }
       }
-      return output;
     } catch (e) {
-      console.error("Error in generateRealEstateSubqueriesFlow:", e);
-      throw e;
+      console.error('Failed to parse JSON response:', response);
+      throw new Error('Invalid JSON response from model');
     }
+
+    return GenerateRealEstateSubqueriesOutputSchema.parse(parsed);
+  } catch (e) {
+    console.error('Error in generateRealEstateSubqueries:', e);
+    throw e;
   }
-);
+}

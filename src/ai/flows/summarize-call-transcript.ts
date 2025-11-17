@@ -1,15 +1,10 @@
-
 'use server';
 /**
- * @fileOverview Summarizes a call transcript using GenAI to extract key information and store it in call metadata.
- *
- * - summarizeCallTranscript - A function that summarizes the call transcript.
- * - SummarizeCallTranscriptInput - The input type for the summarizeCallTranscript function.
- * - SummarizeCallTranscriptOutput - The return type for the summarizeCallTranscript function.
+ * @fileOverview Summarizes a call transcript using Groq to extract key information and store it in call metadata.
  */
 
-import {ai} from '@/ai/genkit';
-import {z} from 'genkit';
+import { chatCompletion } from '@/ai/groq';
+import { z } from 'zod';
 
 const SummarizeCallTranscriptInputSchema = z.object({
   transcript: z
@@ -30,41 +25,26 @@ export type SummarizeCallTranscriptOutput = z.infer<
 export async function summarizeCallTranscript(
   input: SummarizeCallTranscriptInput
 ): Promise<SummarizeCallTranscriptOutput> {
-  return summarizeCallTranscriptFlow(input);
-}
-
-const systemPrompt = `Summarize the following call transcript, extracting the key information and action items discussed during the call.
+  try {
+    const systemPrompt = `Summarize the following call transcript, extracting the key information and action items discussed during the call.
 
 Your entire response MUST be a single JSON object with a single 'summary' field.
 
-Transcript:
-{{{transcript}}}`;
+Example format:
+{"summary": "The call discussed..."}`;
 
+    const response = await chatCompletion(
+      [
+        { role: 'system', content: systemPrompt },
+        { role: 'user', content: `Transcript:\n${input.transcript}` },
+      ],
+      { response_format: { type: 'json_object' } }
+    );
 
-const summarizeCallTranscriptPrompt = ai.definePrompt({
-  name: 'summarizeCallTranscriptPrompt',
-  input: {schema: SummarizeCallTranscriptInputSchema},
-  output: {schema: SummarizeCallTranscriptOutputSchema},
-  prompt: systemPrompt,
-});
-
-const summarizeCallTranscriptFlow = ai.defineFlow(
-  {
-    name: 'summarizeCallTranscriptFlow',
-    inputSchema: SummarizeCallTranscriptInputSchema,
-    outputSchema: SummarizeCallTranscriptOutputSchema,
-  },
-  async input => {
-    try {
-      const response = await summarizeCallTranscriptPrompt(input);
-      const output = response.output;
-      if (!output) {
-        throw new Error('Received no output from model for summary generation.');
-      }
-      return output;
-    } catch (e) {
-      console.error("Error in summarizeCallTranscriptFlow:", e);
-      throw e;
-    }
+    const parsed = JSON.parse(response);
+    return SummarizeCallTranscriptOutputSchema.parse(parsed);
+  } catch (e) {
+    console.error('Error in summarizeCallTranscript:', e);
+    throw e;
   }
-);
+}

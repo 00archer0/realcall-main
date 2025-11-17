@@ -58,6 +58,7 @@ export async function POST(req: NextRequest) {
     }
 
     // 1. Generate the agent's next response using the conversation history.
+    console.log('[Webhook] Calling agentChat...');
     const agentText = await agentChat({
       propertyTitle,
       dealerName,
@@ -75,17 +76,39 @@ export async function POST(req: NextRequest) {
     const shouldEndCall = /\b(goodbye|thank you for your time|have a great day|talk to you later|bye)\b/i.test(agentText);
     
     // 2. Convert the agent's text response to speech.
-    const { audio } = await textToSpeech({ text: agentText });
-    console.log('[Webhook] Converted text to speech.');
+    // For now, use Twilio's built-in TTS (faster and more reliable)
+    // To use Groq TTS, accept terms at https://console.groq.com/playground?model=playai-tts
+    const USE_GROQ_TTS = process.env.USE_GROQ_TTS === 'true';
+    
+    let audioUrl: string | null = null;
+    
+    if (USE_GROQ_TTS) {
+      console.log('[Webhook] Calling textToSpeech...');
+      try {
+        const { audio } = await textToSpeech({ text: agentText });
+        console.log('[Webhook] Converted text to speech.');
 
-    // 3. Store the audio and get a URL to serve it
-    const audioId = storeAudio(audio);
-    const audioUrl = `${process.env.APP_BASE_URL}/api/call/audio/${audioId}`;
-    console.log(`[Webhook] Audio stored with ID: ${audioId}`);
+        // 3. Store the audio and get a URL to serve it
+        const audioId = storeAudio(audio);
+        audioUrl = `${process.env.APP_BASE_URL}/api/call/audio/${audioId}`;
+        console.log(`[Webhook] Audio stored with ID: ${audioId}`);
+      } catch (ttsError) {
+        console.error('[Webhook] Groq TTS failed, falling back to Twilio Say:', ttsError);
+        audioUrl = null;
+      }
+    } else {
+      console.log('[Webhook] Using Twilio built-in TTS (set USE_GROQ_TTS=true to use Groq)');
+    }
 
     // 4. Create a TwiML response to play the audio and then listen for the next user response.
     const response = new VoiceResponse();
-    response.play(audioUrl);
+    
+    if (audioUrl) {
+      response.play(audioUrl);
+    } else {
+      // Use Twilio's built-in TTS (Polly voices)
+      response.say({ voice: 'Polly.Matthew' }, agentText);
+    }
 
     // If the assistant is ending the call, hang up after playing the message
     if (shouldEndCall) {
@@ -121,6 +144,9 @@ export async function POST(req: NextRequest) {
     });
   } catch (error) {
     console.error('[Webhook] Error:', error);
+    console.error('[Webhook] Error stack:', error instanceof Error ? error.stack : 'No stack trace');
+    console.error('[Webhook] Error message:', error instanceof Error ? error.message : String(error));
+    
     const response = new VoiceResponse();
     response.say('An application error occurred. Goodbye.');
     response.hangup();
