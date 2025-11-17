@@ -2,6 +2,9 @@ import { NextRequest, NextResponse } from 'next/server';
 import { updateCallStatus, getCallData, updateCallSummary } from '@/lib/call-storage';
 import { summarizeCallTranscript } from '@/ai/flows/summarize-call-transcript';
 
+// Force this route to use Node.js runtime (not Edge)
+export const runtime = 'nodejs';
+
 /**
  * This webhook is called by Twilio when the call status changes.
  * We use it to detect when the call ends and generate a summary.

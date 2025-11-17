@@ -2,6 +2,9 @@ import type {Metadata} from 'next';
 import './globals.css';
 import { Toaster } from "@/components/ui/toaster"
 
+// Force this app to use Node.js runtime (not Edge)
+export const runtime = 'nodejs';
+
 export const metadata: Metadata = {
   title: 'CallCast AI',
   description: 'Real-Estate Calling Automation — PoC',

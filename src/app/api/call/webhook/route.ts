@@ -9,6 +9,9 @@ import { storeAudio } from '@/lib/audio-storage';
 
 const VoiceResponse = twilio.twiml.VoiceResponse;
 
+// Force this route to use Node.js runtime (not Edge)
+export const runtime = 'nodejs';
+
 // This webhook handles the conversational turns of the Twilio call.
 export async function POST(req: NextRequest) {
   try {
